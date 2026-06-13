@@ -1,0 +1,28 @@
+# vscode
+.vscode
+
+# Intellij
+*.iml
+.idea
+
+# dependencies
+node_modules
+
+# local pnpm store (sandbox-writable location)
+.pnpm-store
+
+# Don't include the compiled main.js file in the repo.
+# It should be uploaded to GitHub releases instead.
+main.js
+
+# Exclude sourcemaps
+*.map
+
+# test coverage
+coverage
+
+# obsidian
+data.json
+
+# Exclude macOS Finder (System Explorer) View States
+.DS_Store
