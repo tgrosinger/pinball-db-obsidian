@@ -96,6 +96,39 @@ export function identifiesMachine(
 }
 
 /**
+ * Does this note's frontmatter carry any extractable Identifier? Used by the
+ * create flow to tell a genuine collision (an identified note for a *different*
+ * Machine, since Identity match already found no match) from an ambiguous legacy
+ * note with no identifier to compare. Pure: never imports `obsidian`.
+ */
+export function hasExtractableIdentifier(
+	frontmatter: Record<string, unknown> | null | undefined,
+	settings: IdentifierSettings,
+): boolean {
+	if (!frontmatter) return false;
+	return (
+		normalizeOpdbId(frontmatter[settings.opdbId]) !== undefined ||
+		normalizeIpdb(frontmatter[settings.ipdb]) !== undefined ||
+		normalizePinside(frontmatter[settings.pinside]) !== undefined
+	);
+}
+
+/**
+ * Choose the filename bracket discriminator for a Machine that genuinely
+ * collides with an existing note: the most stable available identifier,
+ * preferring `opdb_id`, then `pinside_slug`, then `ipdb_id`. Returns `''` only
+ * for the rare Machine carrying none of them. Pure: never imports `obsidian`.
+ */
+export function discriminatorToken(machine: Machine): string {
+	return (
+		asToken(machine.opdb_id) ??
+		asToken(machine.pinside_slug) ??
+		asToken(machine.ipdb_id) ??
+		''
+	);
+}
+
+/**
  * The Identifier values to guarantee on a Machine Note, keyed by configured
  * property name: the bare `opdb_id` and friendly IPDB/Pinside URLs. Composed
  * identically to the default Template's locked Identifier rows so a note's

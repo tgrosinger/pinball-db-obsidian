@@ -47,6 +47,15 @@ const ROLE_LABELS = {
 } as const;
 
 /**
+ * The human-readable `name · manufacturer · year` label shown in the picker and
+ * the Disambiguation prompt, so a Machine reads identically wherever the user
+ * sees it. Pure: never imports `obsidian`.
+ */
+export function machineLabel(machine: Machine): string {
+	return `${machine.name} · ${machine.manufacturer} · ${machine.date.slice(0, 4)}`;
+}
+
+/**
  * A read-only view over a {@link Machine} that computes the derived values the
  * render engine needs — `year`/`month` parsed from `date`, and friendly
  * design-team role accessors — on top of raw field passthrough. Pure: it must

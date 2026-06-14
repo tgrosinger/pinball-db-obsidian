@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MachineView } from './machine-view';
+import { MachineView, machineLabel } from './machine-view';
 import type { Machine } from './machine';
 
 function machine(overrides: Partial<Machine> = {}): Machine {
@@ -111,5 +111,19 @@ describe('MachineView variable resolution', () => {
 		const view = new MachineView(machine());
 		expect(view.variable('mpu')).toBeUndefined();
 		expect(view.variable('not_a_variable')).toBeUndefined();
+	});
+});
+
+describe('machineLabel', () => {
+	it('reads as name · manufacturer · year', () => {
+		expect(
+			machineLabel(
+				machine({
+					name: 'Medieval Madness',
+					manufacturer: 'Williams',
+					date: '1997-06-01',
+				}),
+			),
+		).toBe('Medieval Madness · Williams · 1997');
 	});
 });

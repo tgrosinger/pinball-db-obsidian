@@ -4,15 +4,18 @@ import type { PinballDbSettings } from './settings';
 import { MachineDatabase } from './database';
 import { MachineSuggestModal } from './machine-suggest-modal';
 import type { Machine } from './machine';
-import { MachineView } from './machine-view';
+import { MachineView, machineLabel } from './machine-view';
 import { renderNote } from './render';
-import { computeNotePath } from './note-path';
+import { computeNotePath, discriminate } from './note-path';
 import { DEFAULT_TEMPLATE } from './template';
 import {
 	DEFAULT_IDENTIFIER_SETTINGS,
+	discriminatorToken,
+	hasExtractableIdentifier,
 	identifierValues,
 	identifiesMachine,
 } from './identifier';
+import { DisambiguationModal } from './disambiguation-modal';
 import { slugify } from './slugify';
 
 export default class PinballDbPlugin extends Plugin {
@@ -68,9 +71,12 @@ export default class PinballDbPlugin extends Plugin {
 	/**
 	 * Open the Machine Note for this Machine, or create one. Runs Identity match
 	 * across the vault first so an existing note is recognized wherever it lives
-	 * and whatever it is named; only when none matches does it create from the
-	 * default Template. Configurable Templates and disambiguation arrive in later
-	 * slices; for now the Template and Identifier names are the hardcoded defaults.
+	 * and whatever it is named. With no match, it computes the target path and
+	 * handles whatever sits there: nothing → create; a note carrying a different
+	 * Machine's Identifier → a genuine collision, so create a bracket-
+	 * discriminated sibling; a note with no extractable Identifier → ask the user
+	 * whether it is the same Machine. The Template and Identifier names are the
+	 * hardcoded defaults until configurable settings arrive in a later slice.
 	 */
 	private async createMachineNote(machine: Machine): Promise<void> {
 		const [firstMatch, ...moreMatches] = this.findMachineNotes(machine);
@@ -80,7 +86,7 @@ export default class PinballDbPlugin extends Plugin {
 					`Found ${String(moreMatches.length + 1)} notes for this machine; opening the first.`,
 				);
 			}
-			await this.app.workspace.getLeaf().openFile(firstMatch);
+			await this.openFile(firstMatch);
 			return;
 		}
 
@@ -88,24 +94,45 @@ export default class PinballDbPlugin extends Plugin {
 		const { folder, fileName } = computeNotePath(DEFAULT_TEMPLATE, (name) =>
 			view.variable(name),
 		);
-
-		if (folder !== '') {
-			const existing = this.app.vault.getAbstractFileByPath(folder);
-			if (!(existing instanceof TFolder)) {
-				await this.app.vault.createFolder(folder);
-			}
-		}
-
-		const path = normalizePath(
-			folder === '' ? `${fileName}.md` : `${folder}/${fileName}.md`,
-		);
+		await this.ensureFolder(folder);
+		const path = this.notePath(folder, fileName);
 
 		const atPath = this.app.vault.getAbstractFileByPath(path);
-		if (atPath instanceof TFile) {
-			await this.app.workspace.getLeaf().openFile(atPath);
+		if (!(atPath instanceof TFile)) {
+			await this.createAndOpen(machine, view, path);
 			return;
 		}
 
+		// A note already sits at the target path, but Identity match cleared it
+		// so it is not this Machine. If it carries any Identifier it belongs to a
+		// different Machine (a genuine collision); otherwise we cannot tell and
+		// must ask before touching it.
+		const frontmatter =
+			this.app.metadataCache.getFileCache(atPath)?.frontmatter;
+		if (hasExtractableIdentifier(frontmatter, DEFAULT_IDENTIFIER_SETTINGS)) {
+			await this.createDisambiguated(machine, view, folder, fileName);
+			return;
+		}
+
+		new DisambiguationModal(
+			this.app,
+			path,
+			machineLabel(machine),
+			() => void this.backfillAndOpen(atPath, machine),
+			() => void this.createDisambiguated(machine, view, folder, fileName),
+		).open();
+	}
+
+	/**
+	 * Render the Template, create the note at `path`, and guarantee every
+	 * configured Identifier is present (add-only-if-absent, so a Template that
+	 * already wrote one is never double-written), then open it.
+	 */
+	private async createAndOpen(
+		machine: Machine,
+		view: MachineView,
+		path: string,
+	): Promise<void> {
 		const { frontmatter, body } = renderNote(DEFAULT_TEMPLATE, view);
 		const identifiers = identifierValues(
 			machine,
@@ -118,14 +145,78 @@ export default class PinballDbPlugin extends Plugin {
 				for (const [key, value] of Object.entries(frontmatter)) {
 					fm[key] = value;
 				}
-				// Guarantee every configured Identifier exists, adding only those
-				// the Template did not already write so we never double-write.
 				for (const [key, value] of Object.entries(identifiers)) {
 					if (!(key in fm)) fm[key] = value;
 				}
 			},
 		);
+		await this.openFile(file);
+	}
 
+	/**
+	 * Create a bracket-discriminated sibling note (` [<identifier>]`) so two
+	 * genuinely different Machines that land on the same name never overwrite
+	 * each other, then open it.
+	 */
+	private async createDisambiguated(
+		machine: Machine,
+		view: MachineView,
+		folder: string,
+		fileName: string,
+	): Promise<void> {
+		const discriminated = discriminate(
+			fileName,
+			discriminatorToken(machine),
+		);
+		await this.createAndOpen(
+			machine,
+			view,
+			this.notePath(folder, discriminated),
+		);
+	}
+
+	/**
+	 * Backfill only the configured Identifiers into an existing note — never
+	 * rewriting it from the Template — so its content is preserved and the same
+	 * ambiguity never recurs, then open it.
+	 */
+	private async backfillAndOpen(
+		file: TFile,
+		machine: Machine,
+	): Promise<void> {
+		const identifiers = identifierValues(
+			machine,
+			DEFAULT_IDENTIFIER_SETTINGS,
+		);
+		await this.app.fileManager.processFrontMatter(
+			file,
+			(fm: Record<string, unknown>) => {
+				for (const [key, value] of Object.entries(identifiers)) {
+					fm[key] = value;
+				}
+			},
+		);
+		await this.openFile(file);
+	}
+
+	/** Create the parent folder if the Template targets one that is absent. */
+	private async ensureFolder(folder: string): Promise<void> {
+		if (folder === '') return;
+		const existing = this.app.vault.getAbstractFileByPath(folder);
+		if (!(existing instanceof TFolder)) {
+			await this.app.vault.createFolder(folder);
+		}
+	}
+
+	/** Join a rendered folder and file name into a normalized `.md` vault path. */
+	private notePath(folder: string, fileName: string): string {
+		return normalizePath(
+			folder === '' ? `${fileName}.md` : `${folder}/${fileName}.md`,
+		);
+	}
+
+	/** Open a file in the active leaf. */
+	private async openFile(file: TFile): Promise<void> {
 		await this.app.workspace.getLeaf().openFile(file);
 	}
 

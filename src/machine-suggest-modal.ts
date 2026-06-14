@@ -1,6 +1,7 @@
 import { FuzzySuggestModal } from 'obsidian';
 import type { App, FuzzyMatch } from 'obsidian';
 import type { Machine } from './machine';
+import { machineLabel } from './machine-view';
 import { machineSearchString } from './search-string';
 
 /**
@@ -36,9 +37,7 @@ export class MachineSuggestModal extends FuzzySuggestModal<Machine> {
 		match: FuzzyMatch<Machine>,
 		el: HTMLElement,
 	): void {
-		const m = match.item;
-		const year = m.date.slice(0, 4);
-		el.setText(`${m.name} · ${m.manufacturer} · ${year}`);
+		el.setText(machineLabel(match.item));
 	}
 
 	override onChooseItem(machine: Machine): void {

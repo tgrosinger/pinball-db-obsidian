@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	DEFAULT_IDENTIFIER_SETTINGS,
+	discriminatorToken,
+	hasExtractableIdentifier,
 	identifiesMachine,
 	identifierValues,
 } from './identifier';
@@ -136,6 +138,101 @@ describe('identifiesMachine', () => {
 				{ opdbId: 'opdb', ipdb: 'ipdb-url', pinside: 'pinside-url' },
 			),
 		).toBe(true);
+	});
+});
+
+describe('hasExtractableIdentifier', () => {
+	it('is true when the note carries a non-empty opdb_id', () => {
+		expect(
+			hasExtractableIdentifier(
+				{ opdb_id: 'GRBE4-MQK1Z' },
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBe(true);
+	});
+
+	it('is true for an IPDB id stored as a machine.cgi URL', () => {
+		expect(
+			hasExtractableIdentifier(
+				{ ipdb: 'https://www.ipdb.org/machine.cgi?id=3781' },
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBe(true);
+	});
+
+	it('is true for a Pinside slug stored as a URL', () => {
+		expect(
+			hasExtractableIdentifier(
+				{
+					pinside:
+						'https://pinside.com/pinball/machine/medieval-madness',
+				},
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBe(true);
+	});
+
+	it('is false for a note carrying none of the Identifier properties', () => {
+		expect(
+			hasExtractableIdentifier(
+				{ name: 'Attack from Mars', manufacturer: 'Bally' },
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBe(false);
+	});
+
+	it('is false when the Identifier properties are present but empty', () => {
+		expect(
+			hasExtractableIdentifier(
+				{ opdb_id: '', ipdb: '   ', pinside: '' },
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBe(false);
+	});
+
+	it('is false for missing frontmatter', () => {
+		expect(
+			hasExtractableIdentifier(null, DEFAULT_IDENTIFIER_SETTINGS),
+		).toBe(false);
+	});
+
+	it('honors renamed Identifier property names', () => {
+		expect(
+			hasExtractableIdentifier(
+				{ 'pinside-url': 'medieval-madness' },
+				{ opdbId: 'opdb', ipdb: 'ipdb-url', pinside: 'pinside-url' },
+			),
+		).toBe(true);
+	});
+});
+
+describe('discriminatorToken', () => {
+	it('prefers the opdb_id', () => {
+		expect(
+			discriminatorToken(
+				machine({
+					opdb_id: 'GRBE4-MQK1Z',
+					pinside_slug: 'medieval-madness',
+					ipdb_id: 3781,
+				}),
+			),
+		).toBe('GRBE4-MQK1Z');
+	});
+
+	it('falls back to the pinside_slug when there is no opdb_id', () => {
+		expect(
+			discriminatorToken(
+				machine({ pinside_slug: 'medieval-madness', ipdb_id: 3781 }),
+			),
+		).toBe('medieval-madness');
+	});
+
+	it('falls back to the ipdb_id as a string when it is the only identifier', () => {
+		expect(discriminatorToken(machine({ ipdb_id: 3781 }))).toBe('3781');
+	});
+
+	it('is empty for a Machine carrying no identifiers', () => {
+		expect(discriminatorToken(machine())).toBe('');
 	});
 });
 
