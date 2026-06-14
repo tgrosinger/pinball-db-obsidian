@@ -26,3 +26,6 @@ data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
+
+# Generated database module (built from data/opdb-simplified.json.gz)
+src/generated/

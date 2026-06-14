@@ -12,9 +12,10 @@
 		"pinball"
 	],
 	"scripts": {
+		"generate-db": "node scripts/generate-db.mjs",
 		"dev": "node esbuild.config.mjs",
 		"build": "pnpm run typecheck && node esbuild.config.mjs production",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "pnpm run generate-db && tsc --noEmit",
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix",
 		"format": "prettier --write .",
@@ -39,5 +40,8 @@
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.61.0",
 		"vitest": "^4.1.8"
+	},
+	"dependencies": {
+		"fflate": "^0.8.3"
 	}
 }

@@ -1,41 +1,24 @@
 import { PluginSettingTab, Setting } from 'obsidian';
-import type { App } from 'obsidian';
-import type PinballDbPlugin from './main';
 
-export interface PinballDbSettings {
-	/** Vault-relative path to the JSON file holding the pinball database. */
-	databasePath: string;
-}
+/**
+ * Plugin settings. The bundled database replaced the old `databasePath`
+ * setting; the structured Template (folder, note name, typed Properties, body)
+ * and Identifier property-name settings arrive in later slices.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface PinballDbSettings {}
 
-export const DEFAULT_SETTINGS: PinballDbSettings = {
-	databasePath: 'pinball.json',
-};
+export const DEFAULT_SETTINGS: PinballDbSettings = {};
 
 export class PinballDbSettingTab extends PluginSettingTab {
-	private readonly plugin: PinballDbPlugin;
-
-	constructor(app: App, plugin: PinballDbPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
 	override display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Database path')
+			.setName('Pinball database')
 			.setDesc(
-				'Vault-relative path where the pinball database is stored.',
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder('pinball.json')
-					.setValue(this.plugin.settings.databasePath)
-					.onChange((value) => {
-						this.plugin.settings.databasePath = value;
-						void this.plugin.saveSettings();
-					}),
+				'Template and identifier settings will appear here in a future update.',
 			);
 	}
 }
