@@ -1,24 +1,52 @@
-import { PluginSettingTab, Setting } from 'obsidian';
+import { DEFAULT_TEMPLATE } from './template';
+import type { Template } from './template';
+import { DEFAULT_IDENTIFIER_SETTINGS } from './identifier';
+import type { IdentifierSettings } from './identifier';
 
 /**
- * Plugin settings. The bundled database replaced the old `databasePath`
- * setting; the structured Template (folder, note name, typed Properties, body)
- * and Identifier property-name settings arrive in later slices.
+ * Persisted plugin settings: the structured Template that drives note creation
+ * and the configurable Identifier property names the matcher aligns with. The
+ * bundled database replaced the old `databasePath` setting. Obsidian-free so the
+ * persistence model is unit-testable; the editor UI lives in
+ * {@link ./settings-tab}.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface PinballDbSettings {}
+export interface PinballDbSettings {
+	readonly template: Template;
+	readonly identifiers: IdentifierSettings;
+}
 
-export const DEFAULT_SETTINGS: PinballDbSettings = {};
+/** The out-of-the-box settings: the PRD default Template and Identifier names. */
+export const DEFAULT_SETTINGS: PinballDbSettings = {
+	template: DEFAULT_TEMPLATE,
+	identifiers: DEFAULT_IDENTIFIER_SETTINGS,
+};
 
-export class PinballDbSettingTab extends PluginSettingTab {
-	override display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Pinball database')
-			.setDesc(
-				'Template and identifier settings will appear here in a future update.',
-			);
+/**
+ * Reconcile whatever `loadData()` returned from `data.json` into complete,
+ * usable settings. A fresh install (`null`) yields the defaults so the plugin
+ * produces full notes before any customization.
+ */
+export function normalizeSettings(stored: unknown): PinballDbSettings {
+	if (stored === null || typeof stored !== 'object') {
+		return { ...DEFAULT_SETTINGS };
 	}
+	const data = stored as Partial<PinballDbSettings>;
+	return {
+		template: isTemplate(data.template)
+			? data.template
+			: DEFAULT_SETTINGS.template,
+		identifiers: data.identifiers ?? DEFAULT_SETTINGS.identifiers,
+	};
+}
+
+/** A stored Template is only usable if it has the shape the render/path layers consume. */
+function isTemplate(value: unknown): value is Template {
+	if (value === null || typeof value !== 'object') return false;
+	const t = value as Partial<Template>;
+	return (
+		typeof t.folder === 'string' &&
+		typeof t.noteName === 'string' &&
+		typeof t.body === 'string' &&
+		Array.isArray(t.properties)
+	);
 }

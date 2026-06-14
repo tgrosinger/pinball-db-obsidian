@@ -4,7 +4,7 @@ import type { Machine } from './machine';
  * The configurable frontmatter property *names* that hold each of the three
  * Identifiers. The value sources are fixed (opdb_id bare, IPDB/Pinside URLs);
  * only the property names are user-configurable so the matcher can recognize
- * legacy notes. A later slice surfaces these in settings.
+ * legacy notes. Editable under the settings tab's Identifier property names.
  */
 export interface IdentifierSettings {
 	readonly opdbId: string;

@@ -32,10 +32,9 @@ export interface Template {
 }
 
 /**
- * The built-in Template (PRD "Default Template"). Hardcoded for now; a later
- * slice makes it editable in settings. The three locked-identifier rows
- * (`pinside`, `ipdb`, `opdb_id`) compose their values inline; identifier
- * matching/injection arrives in a later slice.
+ * The built-in Template (PRD "Default Template"), shipped as the out-of-the-box
+ * settings and editable in the settings tab. The three locked-identifier rows
+ * (`pinside`, `ipdb`, `opdb_id`) compose their values inline.
  */
 export const DEFAULT_TEMPLATE: Template = {
 	folder: 'Pinball',

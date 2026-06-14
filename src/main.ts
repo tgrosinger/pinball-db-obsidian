@@ -1,15 +1,14 @@
 import { Notice, Plugin, TFile, TFolder, normalizePath } from 'obsidian';
-import { DEFAULT_SETTINGS, PinballDbSettingTab } from './settings';
+import { normalizeSettings } from './settings';
 import type { PinballDbSettings } from './settings';
+import { PinballDbSettingTab } from './settings-tab';
 import { MachineDatabase } from './database';
 import { MachineSuggestModal } from './machine-suggest-modal';
 import type { Machine } from './machine';
 import { MachineView, machineLabel } from './machine-view';
 import { renderNote } from './render';
 import { computeNotePath, discriminate } from './note-path';
-import { DEFAULT_TEMPLATE } from './template';
 import {
-	DEFAULT_IDENTIFIER_SETTINGS,
 	discriminatorToken,
 	hasExtractableIdentifier,
 	identifierValues,
@@ -75,8 +74,8 @@ export default class PinballDbPlugin extends Plugin {
 	 * handles whatever sits there: nothing → create; a note carrying a different
 	 * Machine's Identifier → a genuine collision, so create a bracket-
 	 * discriminated sibling; a note with no extractable Identifier → ask the user
-	 * whether it is the same Machine. The Template and Identifier names are the
-	 * hardcoded defaults until configurable settings arrive in a later slice.
+	 * whether it is the same Machine. The Template and Identifier names come from
+	 * the user's configured settings.
 	 */
 	private async createMachineNote(machine: Machine): Promise<void> {
 		const [firstMatch, ...moreMatches] = this.findMachineNotes(machine);
@@ -91,8 +90,9 @@ export default class PinballDbPlugin extends Plugin {
 		}
 
 		const view = new MachineView(machine);
-		const { folder, fileName } = computeNotePath(DEFAULT_TEMPLATE, (name) =>
-			view.variable(name),
+		const { folder, fileName } = computeNotePath(
+			this.settings.template,
+			(name) => view.variable(name),
 		);
 		await this.ensureFolder(folder);
 		const path = this.notePath(folder, fileName);
@@ -109,7 +109,7 @@ export default class PinballDbPlugin extends Plugin {
 		// must ask before touching it.
 		const frontmatter =
 			this.app.metadataCache.getFileCache(atPath)?.frontmatter;
-		if (hasExtractableIdentifier(frontmatter, DEFAULT_IDENTIFIER_SETTINGS)) {
+		if (hasExtractableIdentifier(frontmatter, this.settings.identifiers)) {
 			await this.createDisambiguated(machine, view, folder, fileName);
 			return;
 		}
@@ -119,7 +119,8 @@ export default class PinballDbPlugin extends Plugin {
 			path,
 			machineLabel(machine),
 			() => void this.backfillAndOpen(atPath, machine),
-			() => void this.createDisambiguated(machine, view, folder, fileName),
+			() =>
+				void this.createDisambiguated(machine, view, folder, fileName),
 		).open();
 	}
 
@@ -133,10 +134,10 @@ export default class PinballDbPlugin extends Plugin {
 		view: MachineView,
 		path: string,
 	): Promise<void> {
-		const { frontmatter, body } = renderNote(DEFAULT_TEMPLATE, view);
+		const { frontmatter, body } = renderNote(this.settings.template, view);
 		const identifiers = identifierValues(
 			machine,
-			DEFAULT_IDENTIFIER_SETTINGS,
+			this.settings.identifiers,
 		);
 		const file = await this.app.vault.create(path, body);
 		await this.app.fileManager.processFrontMatter(
@@ -186,7 +187,7 @@ export default class PinballDbPlugin extends Plugin {
 	): Promise<void> {
 		const identifiers = identifierValues(
 			machine,
-			DEFAULT_IDENTIFIER_SETTINGS,
+			this.settings.identifiers,
 		);
 		await this.app.fileManager.processFrontMatter(
 			file,
@@ -232,15 +233,13 @@ export default class PinballDbPlugin extends Plugin {
 				identifiesMachine(
 					this.app.metadataCache.getFileCache(file)?.frontmatter,
 					machine,
-					DEFAULT_IDENTIFIER_SETTINGS,
+					this.settings.identifiers,
 				),
 			);
 	}
 
 	async loadSettings(): Promise<void> {
-		const stored =
-			(await this.loadData()) as Partial<PinballDbSettings> | null;
-		this.settings = { ...DEFAULT_SETTINGS, ...stored };
+		this.settings = normalizeSettings(await this.loadData());
 	}
 
 	async saveSettings(): Promise<void> {
