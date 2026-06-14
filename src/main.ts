@@ -4,6 +4,9 @@ import type { PinballDbSettings } from './settings';
 import { MachineDatabase } from './database';
 import { MachineSuggestModal } from './machine-suggest-modal';
 import type { Machine } from './machine';
+import { MachineView } from './machine-view';
+import { renderNote } from './render';
+import { DEFAULT_TEMPLATE } from './template';
 import { slugify } from './slugify';
 
 /** Fixed destination folder for newly created Machine Notes (skeleton slice). */
@@ -60,9 +63,9 @@ export default class PinballDbPlugin extends Plugin {
 	}
 
 	/**
-	 * Create a Machine Note with minimal frontmatter (name, manufacturer, year)
-	 * and open it. Identity matching, the full template engine, and path
-	 * templating arrive in later slices.
+	 * Create a Machine Note from the default Template — full typed frontmatter
+	 * and body — and open it. Identity matching and configurable path templating
+	 * arrive in later slices; for now the folder and filename stay hardcoded.
 	 */
 	private async createMachineNote(machine: Machine): Promise<void> {
 		const existing = this.app.vault.getAbstractFileByPath(NOTE_FOLDER);
@@ -77,20 +80,24 @@ export default class PinballDbPlugin extends Plugin {
 		const path = normalizePath(`${NOTE_FOLDER}/${baseName}.md`);
 
 		const atPath = this.app.vault.getAbstractFileByPath(path);
-		let file: TFile;
 		if (atPath instanceof TFile) {
-			file = atPath;
-		} else {
-			file = await this.app.vault.create(path, '');
-			await this.app.fileManager.processFrontMatter(
-				file,
-				(frontmatter: Record<string, unknown>) => {
-					frontmatter.name = machine.name;
-					frontmatter.manufacturer = machine.manufacturer;
-					frontmatter.year = year;
-				},
-			);
+			await this.app.workspace.getLeaf().openFile(atPath);
+			return;
 		}
+
+		const { frontmatter, body } = renderNote(
+			DEFAULT_TEMPLATE,
+			new MachineView(machine),
+		);
+		const file = await this.app.vault.create(path, body);
+		await this.app.fileManager.processFrontMatter(
+			file,
+			(fm: Record<string, unknown>) => {
+				for (const [key, value] of Object.entries(frontmatter)) {
+					fm[key] = value;
+				}
+			},
+		);
 
 		await this.app.workspace.getLeaf().openFile(file);
 	}
