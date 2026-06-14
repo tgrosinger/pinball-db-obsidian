@@ -6,11 +6,9 @@ import { MachineSuggestModal } from './machine-suggest-modal';
 import type { Machine } from './machine';
 import { MachineView } from './machine-view';
 import { renderNote } from './render';
+import { computeNotePath } from './note-path';
 import { DEFAULT_TEMPLATE } from './template';
 import { slugify } from './slugify';
-
-/** Fixed destination folder for newly created Machine Notes (skeleton slice). */
-const NOTE_FOLDER = 'Pinball';
 
 export default class PinballDbPlugin extends Plugin {
 	override settings!: PinballDbSettings;
@@ -64,20 +62,26 @@ export default class PinballDbPlugin extends Plugin {
 
 	/**
 	 * Create a Machine Note from the default Template — full typed frontmatter
-	 * and body — and open it. Identity matching and configurable path templating
-	 * arrive in later slices; for now the folder and filename stay hardcoded.
+	 * and body — at the templated folder/filename, and open it. Identity matching
+	 * and configurable Templates arrive in later slices; for now the Template is
+	 * the hardcoded default.
 	 */
 	private async createMachineNote(machine: Machine): Promise<void> {
-		const existing = this.app.vault.getAbstractFileByPath(NOTE_FOLDER);
-		if (!(existing instanceof TFolder)) {
-			await this.app.vault.createFolder(NOTE_FOLDER);
+		const view = new MachineView(machine);
+		const { folder, fileName } = computeNotePath(DEFAULT_TEMPLATE, (name) =>
+			view.variable(name),
+		);
+
+		if (folder !== '') {
+			const existing = this.app.vault.getAbstractFileByPath(folder);
+			if (!(existing instanceof TFolder)) {
+				await this.app.vault.createFolder(folder);
+			}
 		}
 
-		const year = machine.date.slice(0, 4);
-		const baseName = sanitizeFileName(
-			`${machine.name} (${machine.manufacturer} ${year})`,
+		const path = normalizePath(
+			folder === '' ? `${fileName}.md` : `${folder}/${fileName}.md`,
 		);
-		const path = normalizePath(`${NOTE_FOLDER}/${baseName}.md`);
 
 		const atPath = this.app.vault.getAbstractFileByPath(path);
 		if (atPath instanceof TFile) {
@@ -85,10 +89,7 @@ export default class PinballDbPlugin extends Plugin {
 			return;
 		}
 
-		const { frontmatter, body } = renderNote(
-			DEFAULT_TEMPLATE,
-			new MachineView(machine),
-		);
+		const { frontmatter, body } = renderNote(DEFAULT_TEMPLATE, view);
 		const file = await this.app.vault.create(path, body);
 		await this.app.fileManager.processFrontMatter(
 			file,
@@ -111,17 +112,4 @@ export default class PinballDbPlugin extends Plugin {
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
 	}
-}
-
-/**
- * Minimal filesystem-safety pass for the skeleton's note name: strip characters
- * that are illegal in file paths or Obsidian links while preserving spaces and
- * case. The real, tested `safe_name` filter and configurable path templating
- * arrive in a later slice.
- */
-function sanitizeFileName(name: string): string {
-	return name
-		.replace(/[\\/:*?"<>|#^[\]]/g, '')
-		.replace(/\s+/g, ' ')
-		.trim();
 }

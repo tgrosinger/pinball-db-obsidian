@@ -68,6 +68,19 @@ function asText(value: RenderedValue): string {
 	return Array.isArray(value) ? value.join(',') : value;
 }
 
+/**
+ * Strip filesystem/Obsidian-illegal characters while preserving spaces and case
+ * (so titles read as `Star Gazer (Stern 1980)`, never a slug). Runs of
+ * whitespace collapse to a single space and the ends are trimmed. Shared by the
+ * `safe_name` filter and note-name path computation.
+ */
+export function safeName(value: string): string {
+	return value
+		.replace(/[\\/:*?"<>|#^[\]]/g, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
 const FILTERS: Record<string, Filter> = {
 	wikilink: (value) => mapStrings(value, (s) => `[[${s}]]`),
 	lower: (value) => mapStrings(value, (s) => s.toLowerCase()),
@@ -100,11 +113,7 @@ const FILTERS: Record<string, Filter> = {
 					: '- ';
 		return items.map((item, index) => `${marker(index)}${item}`).join('\n');
 	},
-	safe_name: (value) =>
-		asText(value)
-			.replace(/[\\/:*?"<>|#^[\]]/g, '')
-			.replace(/\s+/g, ' ')
-			.trim(),
+	safe_name: (value) => safeName(asText(value)),
 	first: (value) =>
 		Array.isArray(value) ? (value[0] ?? '') : value.charAt(0),
 	last: (value) =>
