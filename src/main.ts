@@ -8,6 +8,11 @@ import { MachineView } from './machine-view';
 import { renderNote } from './render';
 import { computeNotePath } from './note-path';
 import { DEFAULT_TEMPLATE } from './template';
+import {
+	DEFAULT_IDENTIFIER_SETTINGS,
+	identifierValues,
+	identifiesMachine,
+} from './identifier';
 import { slugify } from './slugify';
 
 export default class PinballDbPlugin extends Plugin {
@@ -61,12 +66,24 @@ export default class PinballDbPlugin extends Plugin {
 	}
 
 	/**
-	 * Create a Machine Note from the default Template — full typed frontmatter
-	 * and body — at the templated folder/filename, and open it. Identity matching
-	 * and configurable Templates arrive in later slices; for now the Template is
-	 * the hardcoded default.
+	 * Open the Machine Note for this Machine, or create one. Runs Identity match
+	 * across the vault first so an existing note is recognized wherever it lives
+	 * and whatever it is named; only when none matches does it create from the
+	 * default Template. Configurable Templates and disambiguation arrive in later
+	 * slices; for now the Template and Identifier names are the hardcoded defaults.
 	 */
 	private async createMachineNote(machine: Machine): Promise<void> {
+		const [firstMatch, ...moreMatches] = this.findMachineNotes(machine);
+		if (firstMatch) {
+			if (moreMatches.length > 0) {
+				new Notice(
+					`Found ${String(moreMatches.length + 1)} notes for this machine; opening the first.`,
+				);
+			}
+			await this.app.workspace.getLeaf().openFile(firstMatch);
+			return;
+		}
+
 		const view = new MachineView(machine);
 		const { folder, fileName } = computeNotePath(DEFAULT_TEMPLATE, (name) =>
 			view.variable(name),
@@ -90,6 +107,10 @@ export default class PinballDbPlugin extends Plugin {
 		}
 
 		const { frontmatter, body } = renderNote(DEFAULT_TEMPLATE, view);
+		const identifiers = identifierValues(
+			machine,
+			DEFAULT_IDENTIFIER_SETTINGS,
+		);
 		const file = await this.app.vault.create(path, body);
 		await this.app.fileManager.processFrontMatter(
 			file,
@@ -97,10 +118,32 @@ export default class PinballDbPlugin extends Plugin {
 				for (const [key, value] of Object.entries(frontmatter)) {
 					fm[key] = value;
 				}
+				// Guarantee every configured Identifier exists, adding only those
+				// the Template did not already write so we never double-write.
+				for (const [key, value] of Object.entries(identifiers)) {
+					if (!(key in fm)) fm[key] = value;
+				}
 			},
 		);
 
 		await this.app.workspace.getLeaf().openFile(file);
+	}
+
+	/**
+	 * Identity match: every Machine Note in the vault whose frontmatter
+	 * Identifiers tie it to this Machine, found via `metadataCache` regardless of
+	 * the note's location or filename.
+	 */
+	private findMachineNotes(machine: Machine): TFile[] {
+		return this.app.vault
+			.getMarkdownFiles()
+			.filter((file) =>
+				identifiesMachine(
+					this.app.metadataCache.getFileCache(file)?.frontmatter,
+					machine,
+					DEFAULT_IDENTIFIER_SETTINGS,
+				),
+			);
 	}
 
 	async loadSettings(): Promise<void> {
