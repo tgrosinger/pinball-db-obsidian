@@ -13,16 +13,29 @@ import { machineSearchString } from './search-string';
 export class MachineSuggestModal extends FuzzySuggestModal<Machine> {
 	private readonly machines: Machine[];
 	private readonly onChoose: (machine: Machine) => void;
+	private readonly initialQuery: string;
 
 	constructor(
 		app: App,
 		machines: Machine[],
 		onChoose: (machine: Machine) => void,
+		initialQuery = '',
 	) {
 		super(app);
 		this.machines = machines;
 		this.onChoose = onChoose;
+		this.initialQuery = initialQuery;
 		this.setPlaceholder('Search for a pinball machine…');
+	}
+
+	override onOpen(): void {
+		void super.onOpen();
+		// Seed the query (e.g. the note's name when backfilling an ambiguous
+		// file) and dispatch `input` so the suggestion list reflects it at once.
+		if (this.initialQuery !== '') {
+			this.inputEl.value = this.initialQuery;
+			this.inputEl.dispatchEvent(new Event('input'));
+		}
 	}
 
 	override getItems(): Machine[] {

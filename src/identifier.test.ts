@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	DEFAULT_IDENTIFIER_SETTINGS,
 	discriminatorToken,
+	findMachineForNote,
 	hasExtractableIdentifier,
 	identifiesMachine,
 	identifierValues,
@@ -138,6 +139,71 @@ describe('identifiesMachine', () => {
 				{ opdbId: 'opdb', ipdb: 'ipdb-url', pinside: 'pinside-url' },
 			),
 		).toBe(true);
+	});
+});
+
+describe('findMachineForNote', () => {
+	const catalogue: Machine[] = [
+		machine({ name: 'Attack from Mars', opdb_id: 'GRBE4-MQK1Z' }),
+		machine({
+			name: 'Medieval Madness',
+			opdb_id: 'GR6N3-MQK1Z',
+			ipdb_id: 4032,
+			pinside_slug: 'medieval-madness',
+		}),
+	];
+
+	it('returns the Machine the note identifies by opdb_id', () => {
+		expect(
+			findMachineForNote(
+				{ opdb_id: 'GR6N3-MQK1Z' },
+				catalogue,
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBe(catalogue[1]);
+	});
+
+	it('matches a legacy note carrying only a Pinside URL', () => {
+		expect(
+			findMachineForNote(
+				{
+					pinside:
+						'https://pinside.com/pinball/machine/medieval-madness',
+				},
+				catalogue,
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBe(catalogue[1]);
+	});
+
+	it('returns undefined when no Machine matches', () => {
+		expect(
+			findMachineForNote(
+				{ opdb_id: 'NOPE0-XXXXX' },
+				catalogue,
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBeUndefined();
+	});
+
+	it('returns undefined for a note with no identifiers', () => {
+		expect(
+			findMachineForNote(
+				{ name: 'Attack from Mars' },
+				catalogue,
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBeUndefined();
+	});
+
+	it('returns undefined for missing frontmatter', () => {
+		expect(
+			findMachineForNote(
+				undefined,
+				catalogue,
+				DEFAULT_IDENTIFIER_SETTINGS,
+			),
+		).toBeUndefined();
 	});
 });
 

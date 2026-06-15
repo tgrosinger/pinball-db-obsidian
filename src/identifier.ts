@@ -129,6 +129,24 @@ export function discriminatorToken(machine: Machine): string {
 }
 
 /**
+ * The first Machine in `machines` whose Identifiers tie it to this note's
+ * frontmatter, or `undefined` if none do. The reverse of the create flow's
+ * vault scan (note→Machine instead of Machine→notes): the backfill command uses
+ * it to recover the Machine a note describes from its stored Identifiers. Pure:
+ * never imports `obsidian`.
+ */
+export function findMachineForNote(
+	frontmatter: Record<string, unknown> | null | undefined,
+	machines: readonly Machine[],
+	settings: IdentifierSettings,
+): Machine | undefined {
+	if (!frontmatter) return undefined;
+	return machines.find((machine) =>
+		identifiesMachine(frontmatter, machine, settings),
+	);
+}
+
+/**
  * The Identifier values to guarantee on a Machine Note, keyed by configured
  * property name: the bare `opdb_id` and friendly IPDB/Pinside URLs. Composed
  * identically to the default Template's locked Identifier rows so a note's

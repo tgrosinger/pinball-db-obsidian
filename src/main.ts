@@ -7,9 +7,14 @@ import { MachineSuggestModal } from './machine-suggest-modal';
 import type { Machine } from './machine';
 import { MachineView, machineLabel } from './machine-view';
 import { renderNote } from './render';
-import { computeNotePath, discriminate } from './note-path';
+import {
+	computeNotePath,
+	discriminate,
+	findMachinesByFileName,
+} from './note-path';
 import {
 	discriminatorToken,
+	findMachineForNote,
 	hasExtractableIdentifier,
 	identifierValues,
 	identifiesMachine,
@@ -40,6 +45,16 @@ export default class PinballDbPlugin extends Plugin {
 			name: 'Create/open machine note',
 			callback: () => {
 				this.openMachineSearch();
+			},
+		});
+
+		// Add any Template frontmatter the active Machine Note is missing,
+		// without touching fields it already has.
+		this.addCommand({
+			id: 'backfill-template-fields',
+			name: 'Backfill template fields',
+			editorCallback: (_editor, ctx) => {
+				if (ctx.file !== null) this.backfillTemplateFields(ctx.file);
 			},
 		});
 
@@ -198,6 +213,106 @@ export default class PinballDbPlugin extends Plugin {
 			},
 		);
 		await this.openFile(file);
+	}
+
+	/**
+	 * Backfill the Template's frontmatter into the active note. The note is first
+	 * mapped back to its Machine by its stored Identifiers; lacking those, by its
+	 * file name (a unique hit is confirmed via the Disambiguation prompt, several
+	 * hits open the picker). With a Machine in hand it adds only the absent keys.
+	 */
+	private backfillTemplateFields(file: TFile): void {
+		let machines: Machine[];
+		try {
+			machines = this.database.load();
+		} catch (error) {
+			console.error('pinball-db: failed to load bundled database', error);
+			new Notice(
+				'Could not load the machine database. Backfill is unavailable.',
+			);
+			return;
+		}
+
+		const frontmatter =
+			this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const identified = findMachineForNote(
+			frontmatter,
+			machines,
+			this.settings.identifiers,
+		);
+		if (identified) {
+			void this.backfillFields(file, identified);
+			return;
+		}
+
+		const candidates = findMachinesByFileName(
+			machines,
+			this.settings.template,
+			file.basename,
+		);
+		const [first, ...rest] = candidates;
+		if (first === undefined) {
+			new Notice(
+				"Couldn't identify this machine from its frontmatter or file name.",
+			);
+			return;
+		}
+		if (rest.length === 0) {
+			new DisambiguationModal(
+				this.app,
+				file.path,
+				machineLabel(first),
+				() => void this.backfillFields(file, first),
+				() => {
+					/* "No": leave the note untouched. */
+				},
+			).open();
+			return;
+		}
+
+		new MachineSuggestModal(
+			this.app,
+			machines,
+			(machine) => void this.backfillFields(file, machine),
+			first.name,
+		).open();
+	}
+
+	/**
+	 * Render the Template for this Machine and write only the keys the note is
+	 * missing — never overwriting an existing field, even an empty one — then
+	 * guarantee the configured Identifiers the same add-only-if-absent way.
+	 */
+	private async backfillFields(file: TFile, machine: Machine): Promise<void> {
+		const view = new MachineView(machine);
+		const { frontmatter } = renderNote(this.settings.template, view);
+		const identifiers = identifierValues(
+			machine,
+			this.settings.identifiers,
+		);
+		let added = 0;
+		await this.app.fileManager.processFrontMatter(
+			file,
+			(fm: Record<string, unknown>) => {
+				for (const [key, value] of Object.entries(frontmatter)) {
+					if (!(key in fm)) {
+						fm[key] = value;
+						added += 1;
+					}
+				}
+				for (const [key, value] of Object.entries(identifiers)) {
+					if (!(key in fm)) {
+						fm[key] = value;
+						added += 1;
+					}
+				}
+			},
+		);
+		new Notice(
+			added === 0
+				? 'Template fields already present; nothing to backfill.'
+				: `Backfilled ${String(added)} field${added === 1 ? '' : 's'}.`,
+		);
 	}
 
 	/** Create the parent folder if the Template targets one that is absent. */
