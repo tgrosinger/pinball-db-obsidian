@@ -14,39 +14,17 @@ const PROPERTY_TYPES: readonly PropertyType[] = [
 	'datetime',
 ];
 
-/** Maps each Identifier settings key to its label and a tooltip describing the fixed value. */
-const IDENTIFIER_FIELDS: readonly {
-	readonly key: keyof IdentifierSettings;
-	readonly label: string;
-	readonly desc: string;
-}[] = [
-	{
-		key: 'opdbId',
-		label: 'OPDB id property',
-		desc: 'Frontmatter property holding the bare OPDB id.',
-	},
-	{
-		key: 'ipdb',
-		label: 'IPDB property',
-		desc: 'Frontmatter property holding the IPDB URL.',
-	},
-	{
-		key: 'pinside',
-		label: 'Pinside property',
-		desc: 'Frontmatter property holding the Pinside URL.',
-	},
-];
-
 const LOCKED_TOOLTIP =
 	'This Identifier is always written and is used to match existing notes. ' +
-	'Rename it under Identifier property names below.';
+	'You can rename the property, but its value cannot be changed and the row ' +
+	'cannot be removed.';
 
 /**
  * The plugin's settings tab: the structured Template editor (folder, note name,
- * body, and an ordered list of typed Properties) plus the Identifier
- * property-name settings. The three Identifier rows appear locked within the
- * Properties list. Obsidian-dependent UI; the testable settings model lives in
- * {@link ./settings}.
+ * body, and an ordered list of typed Properties). The three Identifier rows
+ * appear inline in the Properties list with an editable name but a locked value
+ * that cannot be removed. Obsidian-dependent UI; the testable settings model
+ * lives in {@link ./settings}.
  */
 export class PinballDbSettingTab extends PluginSettingTab {
 	private readonly plugin: PinballDbPlugin;
@@ -68,7 +46,6 @@ export class PinballDbSettingTab extends PluginSettingTab {
 		this.renderNoteLocation(containerEl);
 		this.renderProperties(containerEl);
 		this.renderBody(containerEl);
-		this.renderIdentifierNames(containerEl);
 	}
 
 	/** Folder and note-name Value templates. */
@@ -99,14 +76,22 @@ export class PinballDbSettingTab extends PluginSettingTab {
 			);
 	}
 
-	/** The ordered, typed Property list, with the three Identifier rows locked. */
+	/**
+	 * The ordered, typed Property list. The three Identifier rows appear inline
+	 * with an editable name but a locked value that cannot be removed.
+	 */
 	private renderProperties(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName('Properties').setHeading();
 
-		const names = this.identifierNames();
 		this.template.properties.forEach((property, index) => {
-			if (names.has(property.name)) {
-				this.renderLockedProperty(containerEl, property);
+			const key = this.identifierKeyForName(property.name);
+			if (key !== undefined) {
+				this.renderIdentifierProperty(
+					containerEl,
+					property,
+					key,
+					index,
+				);
 			} else {
 				this.renderEditableProperty(containerEl, property, index);
 			}
@@ -184,21 +169,56 @@ export class PinballDbSettingTab extends PluginSettingTab {
 		);
 	}
 
-	/** A locked Identifier row: shown for reference but not editable here. */
-	private renderLockedProperty(
+	/**
+	 * An Identifier Property row: the name is editable (and kept in sync with the
+	 * Identifier settings) and the row can be reordered, but the value and type
+	 * are locked and the row cannot be removed. Mirrors the column layout of an
+	 * editable row so the two align, with the trash button replaced by a lock.
+	 */
+	private renderIdentifierProperty(
 		containerEl: HTMLElement,
 		property: Property,
+		key: keyof IdentifierSettings,
+		index: number,
 	): void {
-		new Setting(containerEl)
-			.setName(property.name)
-			.setDesc(property.value)
-			.setTooltip(LOCKED_TOOLTIP)
-			.addExtraButton((button) =>
-				button
-					.setIcon('lock')
-					.setTooltip(LOCKED_TOOLTIP)
-					.setDisabled(true),
-			);
+		const setting = new Setting(containerEl).setTooltip(LOCKED_TOOLTIP);
+		setting.addText((text) =>
+			text
+				.setPlaceholder('Property name')
+				.setValue(property.name)
+				.onChange((value) => {
+					this.renameIdentifier(key, value);
+				}),
+		);
+		setting.addText((text) => {
+			text.setValue(property.value).setDisabled(true);
+			text.inputEl.setAttribute('title', LOCKED_TOOLTIP);
+		});
+		setting.addDropdown((dropdown) => {
+			for (const type of PROPERTY_TYPES) dropdown.addOption(type, type);
+			dropdown.setValue(property.type).setDisabled(true);
+		});
+		setting.addExtraButton((button) =>
+			button
+				.setIcon('arrow-up')
+				.setTooltip('Move up')
+				.setDisabled(index === 0)
+				.onClick(() => {
+					this.moveProperty(index, -1);
+				}),
+		);
+		setting.addExtraButton((button) =>
+			button
+				.setIcon('arrow-down')
+				.setTooltip('Move down')
+				.setDisabled(index === this.template.properties.length - 1)
+				.onClick(() => {
+					this.moveProperty(index, 1);
+				}),
+		);
+		setting.addExtraButton((button) =>
+			button.setIcon('lock').setTooltip(LOCKED_TOOLTIP).setDisabled(true),
+		);
 	}
 
 	/** The note body Value template. */
@@ -217,42 +237,19 @@ export class PinballDbSettingTab extends PluginSettingTab {
 			});
 	}
 
-	/** The three configurable Identifier property names. */
-	private renderIdentifierNames(containerEl: HTMLElement): void {
-		new Setting(containerEl)
-			.setName('Identifier property names')
-			.setHeading();
-		new Setting(containerEl).setDesc(
-			'The frontmatter properties used to match existing notes. Renaming one ' +
-				'also renames its locked row in the Properties list above.',
-		);
-
-		for (const field of IDENTIFIER_FIELDS) {
-			new Setting(containerEl)
-				.setName(field.label)
-				.setDesc(field.desc)
-				.addText((text) =>
-					text
-						.setValue(this.plugin.settings.identifiers[field.key])
-						.onChange((value) => {
-							this.renameIdentifier(field.key, value);
-						}),
-				);
-		}
-	}
-
 	private get template(): Template {
 		return this.plugin.settings.template;
 	}
 
-	/** The current set of configured Identifier property names. */
-	private identifierNames(): Set<string> {
+	/** The Identifier settings key whose configured name matches `name`, if any. */
+	private identifierKeyForName(
+		name: string,
+	): keyof IdentifierSettings | undefined {
 		const { identifiers } = this.plugin.settings;
-		return new Set([
-			identifiers.opdbId,
-			identifiers.ipdb,
-			identifiers.pinside,
-		]);
+		if (name === identifiers.opdbId) return 'opdbId';
+		if (name === identifiers.ipdb) return 'ipdb';
+		if (name === identifiers.pinside) return 'pinside';
+		return undefined;
 	}
 
 	/** Apply a partial Template change and persist. */
@@ -300,8 +297,8 @@ export class PinballDbSettingTab extends PluginSettingTab {
 
 	/**
 	 * Rename an Identifier property: update the Identifier settings and rename the
-	 * matching locked row in the Properties list so the note keeps writing the
-	 * Identifier under the new key.
+	 * matching Property row so the note keeps writing the Identifier under the new
+	 * key. Does not re-render, so editing the inline name field keeps focus.
 	 */
 	private renameIdentifier(
 		key: keyof IdentifierSettings,
@@ -321,6 +318,5 @@ export class PinballDbSettingTab extends PluginSettingTab {
 			},
 		};
 		void this.plugin.saveSettings();
-		this.render();
 	}
 }
