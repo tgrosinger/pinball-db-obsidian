@@ -49,7 +49,7 @@ export class PinballDbSettingTab extends PluginSettingTab {
 		this.renderScores(containerEl);
 	}
 
-	/** The Scores heading used by the Save Score command. */
+	/** Settings for the Save Score command: heading, Location tag and folder. */
 	private renderScores(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName('Scores').setHeading();
 
@@ -66,6 +66,44 @@ export class PinballDbSettingTab extends PluginSettingTab {
 						this.plugin.settings = {
 							...this.plugin.settings,
 							scoresHeading: value,
+						};
+						void this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Location tag')
+			.setDesc(
+				'The tag (without a leading #) that marks a location note. A note ' +
+					'is suggested only once it carries this tag and is linked from a ' +
+					'machine note.',
+			)
+			.addText((text) =>
+				text
+					// eslint-disable-next-line obsidianmd/ui/sentence-case -- literal default tag value
+					.setPlaceholder('pinball-location')
+					.setValue(this.plugin.settings.locationTag)
+					.onChange((value) => {
+						this.plugin.settings = {
+							...this.plugin.settings,
+							locationTag: value,
+						};
+						void this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Locations folder')
+			.setDesc('The folder new location notes are created in.')
+			.addText((text) =>
+				text
+					// eslint-disable-next-line obsidianmd/ui/sentence-case -- literal default folder path
+					.setPlaceholder('Pinball/Locations')
+					.setValue(this.plugin.settings.locationsFolder)
+					.onChange((value) => {
+						this.plugin.settings = {
+							...this.plugin.settings,
+							locationsFolder: value,
 						};
 						void this.plugin.saveSettings();
 					}),

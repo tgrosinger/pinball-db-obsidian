@@ -1,4 +1,6 @@
 import { App, Modal, Setting } from 'obsidian';
+import { LocationSuggest } from './location-suggest';
+import type { Location } from './location';
 
 /** The raw values the Save Score form collects, before table formatting. */
 export interface ScoreFormValues {
@@ -27,6 +29,7 @@ export class SaveScoreModal extends Modal {
 		app: App,
 		private readonly machineLabel: string,
 		today: string,
+		private readonly locations: readonly Location[],
 		private readonly onSubmit: (values: ScoreFormValues) => void,
 	) {
 		super(app);
@@ -55,11 +58,19 @@ export class SaveScoreModal extends Modal {
 		new Setting(this.contentEl)
 			.setName('Location')
 			.setDesc('Optional. The venue where you played.')
-			.addText((text) =>
+			.addText((text) => {
 				text.onChange((value) => {
 					this.location = value;
-				}),
-			);
+				});
+				new LocationSuggest(
+					this.app,
+					text.inputEl,
+					this.locations,
+					(name) => {
+						this.location = name;
+					},
+				);
+			});
 
 		new Setting(this.contentEl).setName('Notes').addTextArea((text) => {
 			text.onChange((value) => {

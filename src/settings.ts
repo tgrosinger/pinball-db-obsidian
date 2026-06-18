@@ -15,6 +15,14 @@ export interface PinballDbSettings {
 	readonly identifiers: IdentifierSettings;
 	/** The literal heading line under which Save Score appends rows. */
 	readonly scoresHeading: string;
+	/**
+	 * The tag (stored without a leading `#`) that marks a note as a candidate
+	 * Location, matched against frontmatter and inline tags and written to new
+	 * Location notes' frontmatter.
+	 */
+	readonly locationTag: string;
+	/** The folder new Location notes are created in. */
+	readonly locationsFolder: string;
 }
 
 /** The out-of-the-box settings: the PRD default Template and Identifier names. */
@@ -22,6 +30,8 @@ export const DEFAULT_SETTINGS: PinballDbSettings = {
 	template: DEFAULT_TEMPLATE,
 	identifiers: DEFAULT_IDENTIFIER_SETTINGS,
 	scoresHeading: '## Scores',
+	locationTag: 'pinball-location',
+	locationsFolder: 'Pinball/Locations',
 };
 
 /**
@@ -43,6 +53,14 @@ export function normalizeSettings(stored: unknown): PinballDbSettings {
 			typeof data.scoresHeading === 'string'
 				? data.scoresHeading
 				: DEFAULT_SETTINGS.scoresHeading,
+		locationTag:
+			typeof data.locationTag === 'string'
+				? data.locationTag
+				: DEFAULT_SETTINGS.locationTag,
+		locationsFolder:
+			typeof data.locationsFolder === 'string'
+				? data.locationsFolder
+				: DEFAULT_SETTINGS.locationsFolder,
 	};
 }
 

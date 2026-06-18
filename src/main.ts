@@ -4,6 +4,7 @@ import {
 	Plugin,
 	TFile,
 	TFolder,
+	getAllTags,
 	normalizePath,
 } from 'obsidian';
 import { normalizeSettings } from './settings';
@@ -30,6 +31,12 @@ import { DisambiguationModal } from './disambiguation-modal';
 import { SaveScoreModal } from './save-score-modal';
 import type { ScoreFormValues } from './save-score-modal';
 import { insertScoreRow, renderScoreRow } from './score-table';
+import {
+	resolveTypedLocation,
+	selectLocations,
+	type Location,
+} from './location';
+import { safeName } from './render';
 import { slugify } from './slugify';
 
 export default class PinballDbPlugin extends Plugin {
@@ -133,6 +140,7 @@ export default class PinballDbPlugin extends Plugin {
 				this.app,
 				machineLabel(machine),
 				this.todayIso(),
+				this.existingLocations(),
 				(values) => {
 					void this.saveScore(machine, values);
 				},
@@ -153,7 +161,8 @@ export default class PinballDbPlugin extends Plugin {
 		const file = await this.resolveMachineNote(machine);
 		if (!file) return;
 
-		const row = renderScoreRow(values);
+		const location = await this.resolveLocationName(values.location);
+		const row = renderScoreRow({ ...values, location });
 		const content = await this.app.vault.read(file);
 		const headings = (
 			this.app.metadataCache.getFileCache(file)?.headings ?? []
@@ -170,6 +179,103 @@ export default class PinballDbPlugin extends Plugin {
 		);
 		await this.app.vault.modify(file, updated);
 		await this.openFileAtLine(file, rowLine);
+	}
+
+	/**
+	 * Resolve the typed venue text to the basename the score row links
+	 * (`[[basename]]`). Blank stays blank (Location is optional). Typed text that
+	 * matches an existing Location (case-insensitively) reuses that note's
+	 * basename so no duplicate is created; a brand-new venue is created as a
+	 * tagged note and its `safeName` basename returned. Linking the basename
+	 * rather than the display name guarantees the link resolves to the file even
+	 * when `safeName` strips characters from the name — that resolved link is what
+	 * later qualifies the Location for suggestions.
+	 */
+	private async resolveLocationName(typed: string): Promise<string> {
+		const trimmed = typed.trim();
+		if (trimmed === '') return '';
+
+		const resolution = resolveTypedLocation(
+			trimmed,
+			this.existingLocations(),
+		);
+		if (resolution.kind === 'reuse') return resolution.location.fileName;
+
+		await this.createLocationNote(resolution.name);
+		return safeName(resolution.name);
+	}
+
+	/**
+	 * Create a minimal tagged Location note: `<Locations folder>/<safe_name>.md`
+	 * with frontmatter `tags`/`name` and a `# <name>` body. A pre-existing note
+	 * already sitting at that path is left untouched (never adopted or modified),
+	 * so an unrelated note sharing the basename is never overwritten.
+	 */
+	private async createLocationNote(name: string): Promise<void> {
+		const folder = normalizePath(this.settings.locationsFolder);
+		await this.ensureFolder(folder);
+		const path = this.notePath(folder, safeName(name));
+		if (this.app.vault.getAbstractFileByPath(path) !== null) return;
+
+		const file = await this.app.vault.create(path, `# ${name}\n`);
+		await this.app.fileManager.processFrontMatter(
+			file,
+			(fm: Record<string, unknown>) => {
+				fm.tags = [this.settings.locationTag];
+				fm.name = name;
+			},
+		);
+	}
+
+	/**
+	 * Snapshot the venues that qualify for suggestions: notes carrying the
+	 * configured Location tag (frontmatter or inline) that are also linked from a
+	 * Machine Note. The pure {@link selectLocations} owns the predicate; this only
+	 * gathers each note's display name, basename, tags, and backlink flag from the
+	 * metadata cache. Listed by `name` (frontmatter, falling back to the filename).
+	 */
+	private existingLocations(): Location[] {
+		const linkedTargets = this.machineLinkedTargets();
+		const candidates = this.app.vault.getMarkdownFiles().map((file) => {
+			const cache = this.app.metadataCache.getFileCache(file);
+			const name: unknown = cache?.frontmatter?.name;
+			return {
+				name:
+					typeof name === 'string' && name.trim() !== ''
+						? name
+						: file.basename,
+				fileName: file.basename,
+				tags: cache ? (getAllTags(cache) ?? []) : [],
+				linkedFromMachineNote: linkedTargets.has(file.path),
+			};
+		});
+		return selectLocations(candidates, this.settings.locationTag);
+	}
+
+	/**
+	 * The paths of every note linked from at least one Machine Note, read from the
+	 * resolved-links graph. "Is a Machine Note" reuses the Identifier test, so no
+	 * separate machine-tag concept is introduced.
+	 */
+	private machineLinkedTargets(): Set<string> {
+		const { resolvedLinks } = this.app.metadataCache;
+		const targets = new Set<string>();
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			const frontmatter =
+				this.app.metadataCache.getFileCache(file)?.frontmatter;
+			if (
+				!hasExtractableIdentifier(
+					frontmatter,
+					this.settings.identifiers,
+				)
+			) {
+				continue;
+			}
+			for (const target of Object.keys(resolvedLinks[file.path] ?? {})) {
+				targets.add(target);
+			}
+		}
+		return targets;
 	}
 
 	/** Today's calendar day as `YYYY-MM-DD`, prefilled into the Date field. */

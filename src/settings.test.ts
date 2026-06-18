@@ -27,6 +27,30 @@ describe('normalizeSettings', () => {
 		expect(settings.scoresHeading).toBe('# Plays');
 	});
 
+	it('defaults the Location tag and folder on a fresh install', () => {
+		const settings = normalizeSettings(null);
+		expect(settings.locationTag).toBe('pinball-location');
+		expect(settings.locationsFolder).toBe('Pinball/Locations');
+	});
+
+	it('defaults the Location fields for settings saved before they existed', () => {
+		const settings = normalizeSettings({
+			template: DEFAULT_TEMPLATE,
+			identifiers: DEFAULT_IDENTIFIER_SETTINGS,
+		});
+		expect(settings.locationTag).toBe('pinball-location');
+		expect(settings.locationsFolder).toBe('Pinball/Locations');
+	});
+
+	it('preserves customized Location settings across reloads', () => {
+		const settings = normalizeSettings({
+			locationTag: 'arcade',
+			locationsFolder: 'Venues',
+		});
+		expect(settings.locationTag).toBe('arcade');
+		expect(settings.locationsFolder).toBe('Venues');
+	});
+
 	it('preserves a fully saved Template and Identifier names across reloads', () => {
 		const stored = {
 			template: {
