@@ -10,6 +10,23 @@ describe('normalizeSettings', () => {
 		expect(settings.identifiers).toEqual(DEFAULT_IDENTIFIER_SETTINGS);
 	});
 
+	it('defaults the Scores heading on a fresh install', () => {
+		expect(normalizeSettings(null).scoresHeading).toBe('## Scores');
+	});
+
+	it('defaults the Scores heading for settings saved before the field existed', () => {
+		const settings = normalizeSettings({
+			template: DEFAULT_TEMPLATE,
+			identifiers: DEFAULT_IDENTIFIER_SETTINGS,
+		});
+		expect(settings.scoresHeading).toBe('## Scores');
+	});
+
+	it('preserves a customized Scores heading across reloads', () => {
+		const settings = normalizeSettings({ scoresHeading: '# Plays' });
+		expect(settings.scoresHeading).toBe('# Plays');
+	});
+
 	it('preserves a fully saved Template and Identifier names across reloads', () => {
 		const stored = {
 			template: {

@@ -1,4 +1,11 @@
-import { Notice, Plugin, TFile, TFolder, normalizePath } from 'obsidian';
+import {
+	MarkdownView,
+	Notice,
+	Plugin,
+	TFile,
+	TFolder,
+	normalizePath,
+} from 'obsidian';
 import { normalizeSettings } from './settings';
 import type { PinballDbSettings } from './settings';
 import { PinballDbSettingTab } from './settings-tab';
@@ -20,6 +27,9 @@ import {
 	identifiesMachine,
 } from './identifier';
 import { DisambiguationModal } from './disambiguation-modal';
+import { SaveScoreModal } from './save-score-modal';
+import type { ScoreFormValues } from './save-score-modal';
+import { insertScoreRow, renderScoreRow } from './score-table';
 import { slugify } from './slugify';
 
 export default class PinballDbPlugin extends Plugin {
@@ -45,6 +55,14 @@ export default class PinballDbPlugin extends Plugin {
 			name: 'Create/open machine note',
 			callback: () => {
 				this.openMachineSearch();
+			},
+		});
+
+		this.addCommand({
+			id: 'save-score',
+			name: 'Save score',
+			callback: () => {
+				this.openSaveScore();
 			},
 		});
 
@@ -91,6 +109,74 @@ export default class PinballDbPlugin extends Plugin {
 	private async openMachineNote(machine: Machine): Promise<void> {
 		const file = await this.resolveMachineNote(machine);
 		if (file) await this.openFile(file);
+	}
+
+	/**
+	 * Save Score wizard: stage one reuses the fuzzy Machine picker (no note I/O),
+	 * stage two is the score form. All note I/O is deferred to {@link saveScore}
+	 * on submit so the Disambiguation prompt never interrupts the form mid-flow.
+	 */
+	private openSaveScore(): void {
+		let machines: Machine[];
+		try {
+			machines = this.database.load();
+		} catch (error) {
+			console.error('pinball-db: failed to load bundled database', error);
+			new Notice(
+				'Could not load the machine database. Search is unavailable.',
+			);
+			return;
+		}
+
+		new MachineSuggestModal(this.app, machines, (machine) => {
+			new SaveScoreModal(
+				this.app,
+				machineLabel(machine),
+				this.todayIso(),
+				(values) => {
+					void this.saveScore(machine, values);
+				},
+			).open();
+		}).open();
+	}
+
+	/**
+	 * Resolve (or create) the Machine Note via the shared resolution, append the
+	 * play session as a table row under the configured Scores heading, and open
+	 * the note scrolled to the new row. Heading positions come from the
+	 * `metadataCache`; the pure `score-table` module owns the format and insertion.
+	 */
+	private async saveScore(
+		machine: Machine,
+		values: ScoreFormValues,
+	): Promise<void> {
+		const file = await this.resolveMachineNote(machine);
+		if (!file) return;
+
+		const row = renderScoreRow(values);
+		const content = await this.app.vault.read(file);
+		const headings = (
+			this.app.metadataCache.getFileCache(file)?.headings ?? []
+		).map((heading) => ({
+			heading: heading.heading,
+			level: heading.level,
+			line: heading.position.start.line,
+		}));
+		const { content: updated, rowLine } = insertScoreRow(
+			content,
+			headings,
+			this.settings.scoresHeading,
+			row,
+		);
+		await this.app.vault.modify(file, updated);
+		await this.openFileAtLine(file, rowLine);
+	}
+
+	/** Today's calendar day as `YYYY-MM-DD`, prefilled into the Date field. */
+	private todayIso(): string {
+		const now = new Date();
+		const pad = (n: number): string => String(n).padStart(2, '0');
+		return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 	}
 
 	/**
@@ -369,6 +455,18 @@ export default class PinballDbPlugin extends Plugin {
 	/** Open a file in the active leaf. */
 	private async openFile(file: TFile): Promise<void> {
 		await this.app.workspace.getLeaf().openFile(file);
+	}
+
+	/** Open a file and scroll its editor to a given line (the just-written row). */
+	private async openFileAtLine(file: TFile, line: number): Promise<void> {
+		const leaf = this.app.workspace.getLeaf();
+		await leaf.openFile(file);
+		const { view } = leaf;
+		if (view instanceof MarkdownView) {
+			const pos = { line, ch: 0 };
+			view.editor.setCursor(pos);
+			view.editor.scrollIntoView({ from: pos, to: pos }, true);
+		}
 	}
 
 	/**

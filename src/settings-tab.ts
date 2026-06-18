@@ -46,6 +46,30 @@ export class PinballDbSettingTab extends PluginSettingTab {
 		this.renderNoteLocation(containerEl);
 		this.renderProperties(containerEl);
 		this.renderBody(containerEl);
+		this.renderScores(containerEl);
+	}
+
+	/** The Scores heading used by the Save Score command. */
+	private renderScores(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName('Scores').setHeading();
+
+		new Setting(containerEl)
+			.setName('Scores heading')
+			.setDesc(
+				'The literal Markdown heading line that scores are appended under.',
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder('## Scores')
+					.setValue(this.plugin.settings.scoresHeading)
+					.onChange((value) => {
+						this.plugin.settings = {
+							...this.plugin.settings,
+							scoresHeading: value,
+						};
+						void this.plugin.saveSettings();
+					}),
+			);
 	}
 
 	/** Folder and note-name Value templates. */

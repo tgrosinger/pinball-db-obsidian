@@ -13,12 +13,15 @@ import type { IdentifierSettings } from './identifier';
 export interface PinballDbSettings {
 	readonly template: Template;
 	readonly identifiers: IdentifierSettings;
+	/** The literal heading line under which Save Score appends rows. */
+	readonly scoresHeading: string;
 }
 
 /** The out-of-the-box settings: the PRD default Template and Identifier names. */
 export const DEFAULT_SETTINGS: PinballDbSettings = {
 	template: DEFAULT_TEMPLATE,
 	identifiers: DEFAULT_IDENTIFIER_SETTINGS,
+	scoresHeading: '## Scores',
 };
 
 /**
@@ -36,6 +39,10 @@ export function normalizeSettings(stored: unknown): PinballDbSettings {
 			? data.template
 			: DEFAULT_SETTINGS.template,
 		identifiers: data.identifiers ?? DEFAULT_SETTINGS.identifiers,
+		scoresHeading:
+			typeof data.scoresHeading === 'string'
+				? data.scoresHeading
+				: DEFAULT_SETTINGS.scoresHeading,
 	};
 }
 
