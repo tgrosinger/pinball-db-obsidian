@@ -78,21 +78,37 @@ export default class PinballDbPlugin extends Plugin {
 		}
 
 		new MachineSuggestModal(this.app, machines, (machine) => {
-			void this.createMachineNote(machine);
+			void this.openMachineNote(machine);
 		}).open();
 	}
 
 	/**
-	 * Open the Machine Note for this Machine, or create one. Runs Identity match
-	 * across the vault first so an existing note is recognized wherever it lives
-	 * and whatever it is named. With no match, it computes the target path and
-	 * handles whatever sits there: nothing → create; a note carrying a different
-	 * Machine's Identifier → a genuine collision, so create a bracket-
-	 * discriminated sibling; a note with no extractable Identifier → ask the user
-	 * whether it is the same Machine. The Template and Identifier names come from
-	 * the user's configured settings.
+	 * Create/open command behavior: resolve the Machine Note and open whatever
+	 * the resolution returns. All the find-or-create logic lives in
+	 * `resolveMachineNote`; this only adds the open so the resolution can be
+	 * reused by callers (e.g. Save Score) that do something other than open.
 	 */
-	private async createMachineNote(machine: Machine): Promise<void> {
+	private async openMachineNote(machine: Machine): Promise<void> {
+		const file = await this.resolveMachineNote(machine);
+		if (file) await this.openFile(file);
+	}
+
+	/**
+	 * Resolve the Machine Note for this Machine, creating one if needed, and
+	 * return the resolved `TFile` — without opening it — so any caller can reuse
+	 * the single find-or-create path. Runs Identity match across the vault first
+	 * so an existing note is recognized wherever it lives and whatever it is
+	 * named. With no match, it computes the target path and handles whatever sits
+	 * there: nothing → create; a note carrying a different Machine's Identifier →
+	 * a genuine collision, so create a bracket-discriminated sibling; a note with
+	 * no extractable Identifier → ask the user whether it is the same Machine. The
+	 * Template and Identifier names come from the user's configured settings.
+	 *
+	 * Because the Disambiguation prompt is async and user-driven, the result is
+	 * surfaced after the user answers; dismissing the prompt resolves `null`,
+	 * leaving the vault untouched.
+	 */
+	private async resolveMachineNote(machine: Machine): Promise<TFile | null> {
 		const [firstMatch, ...moreMatches] = this.findMachineNotes(machine);
 		if (firstMatch) {
 			if (moreMatches.length > 0) {
@@ -100,8 +116,7 @@ export default class PinballDbPlugin extends Plugin {
 					`Found ${String(moreMatches.length + 1)} notes for this machine; opening the first.`,
 				);
 			}
-			await this.openFile(firstMatch);
-			return;
+			return firstMatch;
 		}
 
 		const view = new MachineView(machine);
@@ -114,8 +129,7 @@ export default class PinballDbPlugin extends Plugin {
 
 		const atPath = this.app.vault.getAbstractFileByPath(path);
 		if (!(atPath instanceof TFile)) {
-			await this.createAndOpen(machine, view, path);
-			return;
+			return this.createNote(machine, view, path);
 		}
 
 		// A note already sits at the target path, but Identity match cleared it
@@ -125,30 +139,51 @@ export default class PinballDbPlugin extends Plugin {
 		const frontmatter =
 			this.app.metadataCache.getFileCache(atPath)?.frontmatter;
 		if (hasExtractableIdentifier(frontmatter, this.settings.identifiers)) {
-			await this.createDisambiguated(machine, view, folder, fileName);
-			return;
+			return this.createDisambiguated(machine, view, folder, fileName);
 		}
 
-		new DisambiguationModal(
-			this.app,
-			path,
-			machineLabel(machine),
-			() => void this.backfillAndOpen(atPath, machine),
-			() =>
-				void this.createDisambiguated(machine, view, folder, fileName),
-		).open();
+		return new Promise<TFile | null>((resolve) => {
+			new DisambiguationModal(
+				this.app,
+				path,
+				machineLabel(machine),
+				() => {
+					// On failure settle null rather than leaving the awaited
+					// resolution hung; the command then simply opens nothing.
+					void this.backfillIdentifiers(atPath, machine).then(
+						resolve,
+						() => {
+							resolve(null);
+						},
+					);
+				},
+				() => {
+					void this.createDisambiguated(
+						machine,
+						view,
+						folder,
+						fileName,
+					).then(resolve, () => {
+						resolve(null);
+					});
+				},
+				() => {
+					resolve(null);
+				},
+			).open();
+		});
 	}
 
 	/**
 	 * Render the Template, create the note at `path`, and guarantee every
 	 * configured Identifier is present (add-only-if-absent, so a Template that
-	 * already wrote one is never double-written), then open it.
+	 * already wrote one is never double-written), then return the created file.
 	 */
-	private async createAndOpen(
+	private async createNote(
 		machine: Machine,
 		view: MachineView,
 		path: string,
-	): Promise<void> {
+	): Promise<TFile> {
 		const { frontmatter, body } = renderNote(this.settings.template, view);
 		const identifiers = identifierValues(
 			machine,
@@ -166,25 +201,25 @@ export default class PinballDbPlugin extends Plugin {
 				}
 			},
 		);
-		await this.openFile(file);
+		return file;
 	}
 
 	/**
 	 * Create a bracket-discriminated sibling note (` [<identifier>]`) so two
 	 * genuinely different Machines that land on the same name never overwrite
-	 * each other, then open it.
+	 * each other, then return the created file.
 	 */
 	private async createDisambiguated(
 		machine: Machine,
 		view: MachineView,
 		folder: string,
 		fileName: string,
-	): Promise<void> {
+	): Promise<TFile> {
 		const discriminated = discriminate(
 			fileName,
 			discriminatorToken(machine),
 		);
-		await this.createAndOpen(
+		return this.createNote(
 			machine,
 			view,
 			this.notePath(folder, discriminated),
@@ -194,12 +229,12 @@ export default class PinballDbPlugin extends Plugin {
 	/**
 	 * Backfill only the configured Identifiers into an existing note — never
 	 * rewriting it from the Template — so its content is preserved and the same
-	 * ambiguity never recurs, then open it.
+	 * ambiguity never recurs, then return the file.
 	 */
-	private async backfillAndOpen(
+	private async backfillIdentifiers(
 		file: TFile,
 		machine: Machine,
-	): Promise<void> {
+	): Promise<TFile> {
 		const identifiers = identifierValues(
 			machine,
 			this.settings.identifiers,
@@ -212,7 +247,7 @@ export default class PinballDbPlugin extends Plugin {
 				}
 			},
 		);
-		await this.openFile(file);
+		return file;
 	}
 
 	/**

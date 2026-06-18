@@ -7,15 +7,21 @@ import { App, Modal, Setting } from 'obsidian';
  * pure `hasExtractableIdentifier`; this modal only collects the human answer.
  *
  * Exactly one of `onSame`/`onDifferent` runs, and only on an explicit choice —
- * dismissing the modal resolves nothing, leaving the vault untouched.
+ * dismissing the modal resolves nothing, leaving the vault untouched and firing
+ * the optional `onDismiss` so an awaiting caller can settle.
  */
 export class DisambiguationModal extends Modal {
+	// Set true (before `close()`) by an explicit choice so `onClose` can tell a
+	// real dismissal — Esc, click-outside, X — apart from a button-driven close.
+	private chose = false;
+
 	constructor(
 		app: App,
 		private readonly path: string,
 		private readonly label: string,
 		private readonly onSame: () => void,
 		private readonly onDifferent: () => void,
+		private readonly onDismiss?: () => void,
 	) {
 		super(app);
 	}
@@ -28,18 +34,18 @@ export class DisambiguationModal extends Modal {
 
 		new Setting(this.contentEl)
 			.addButton((button) =>
-				button
-					.setButtonText('No, create a new note')
-					.onClick(() => {
-						this.close();
-						this.onDifferent();
-					}),
+				button.setButtonText('No, create a new note').onClick(() => {
+					this.chose = true;
+					this.close();
+					this.onDifferent();
+				}),
 			)
 			.addButton((button) =>
 				button
 					.setButtonText('Yes, this is it')
 					.setCta()
 					.onClick(() => {
+						this.chose = true;
 						this.close();
 						this.onSame();
 					}),
@@ -48,5 +54,6 @@ export class DisambiguationModal extends Modal {
 
 	override onClose(): void {
 		this.contentEl.empty();
+		if (!this.chose) this.onDismiss?.();
 	}
 }
