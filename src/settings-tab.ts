@@ -1,6 +1,7 @@
 import { PluginSettingTab, Setting } from 'obsidian';
 import type { App } from 'obsidian';
 import type PinballDbPlugin from './main';
+import { FolderSuggest } from './folder-suggest';
 import type { Property, PropertyType, Template } from './template';
 import type { IdentifierSettings } from './identifier';
 
@@ -95,8 +96,8 @@ export class PinballDbSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Locations folder')
 			.setDesc('The folder new location notes are created in.')
-			.addText((text) =>
-				text
+			.addSearch((search) => {
+				search
 					// eslint-disable-next-line obsidianmd/ui/sentence-case -- literal default folder path
 					.setPlaceholder('Pinball/Locations')
 					.setValue(this.plugin.settings.locationsFolder)
@@ -106,8 +107,15 @@ export class PinballDbSettingTab extends PluginSettingTab {
 							locationsFolder: value,
 						};
 						void this.plugin.saveSettings();
-					}),
-			);
+					});
+				new FolderSuggest(this.app, search.inputEl, (path) => {
+					this.plugin.settings = {
+						...this.plugin.settings,
+						locationsFolder: path,
+					};
+					void this.plugin.saveSettings();
+				});
+			});
 	}
 
 	/** Folder and note-name Value templates. */
@@ -117,14 +125,17 @@ export class PinballDbSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Folder')
 			.setDesc('Value template for the folder new notes are created in.')
-			.addText((text) =>
-				text
+			.addSearch((search) => {
+				search
 					.setPlaceholder('Pinball')
 					.setValue(this.template.folder)
 					.onChange((value) => {
 						this.updateTemplate({ folder: value });
-					}),
-			);
+					});
+				new FolderSuggest(this.app, search.inputEl, (path) => {
+					this.updateTemplate({ folder: path });
+				});
+			});
 
 		new Setting(containerEl)
 			.setName('Note name')
