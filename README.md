@@ -1,7 +1,9 @@
 # Pinball DB
 
 An Obsidian plugin to track and organize a database of pinball machines inside
-your vault.
+your vault. Quickly create notes with pinball machine details and deep links to the machine on popular pinball websites. Record your scores for each machine.
+
+![Pinball machine selector](https://raw.githubusercontent.com/tgrosinger/pinball-db-obsidian/refs/heads/main/resources/machine-selector.png)
 
 ## Development
 
@@ -36,17 +38,6 @@ load the build output:
 Obsidian loads `main.js`, `manifest.json`, and `styles.css`. Run `pnpm dev` (or
 `pnpm build`) to generate `main.js`, then enable the plugin in Obsidian's
 community-plugin settings.
-
-## Project structure
-
-| Path                 | Purpose                                            |
-| -------------------- | -------------------------------------------------- |
-| `src/main.ts`        | Plugin entry point (`onload` / settings wiring).   |
-| `src/settings.ts`    | Settings interface, defaults, and settings tab.    |
-| `src/slugify.ts`     | Example pure module covered by a unit test.        |
-| `manifest.json`      | Obsidian plugin manifest.                          |
-| `esbuild.config.mjs` | Bundler configuration.                             |
-| `version-bump.mjs`   | Syncs `manifest.json` / `versions.json` on release.|
 
 ## Releasing
 
