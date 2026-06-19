@@ -37,7 +37,6 @@ import {
 	type Location,
 } from './location';
 import { safeName } from './render';
-import { slugify } from './slugify';
 
 export default class PinballDbPlugin extends Plugin {
 	override settings!: PinballDbSettings;
@@ -46,16 +45,6 @@ export default class PinballDbPlugin extends Plugin {
 
 	override async onload(): Promise<void> {
 		await this.loadSettings();
-
-		// Replace the current selection with its slugified form. Useful for
-		// turning a machine title into a stable note name / database key.
-		this.addCommand({
-			id: 'slugify-selection',
-			name: 'Slugify selection',
-			editorCallback: (editor) => {
-				editor.replaceSelection(slugify(editor.getSelection()));
-			},
-		});
 
 		this.addCommand({
 			id: 'create-open-machine-note',
