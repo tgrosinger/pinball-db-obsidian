@@ -22,6 +22,10 @@ export default tseslint.config(
 			'*.mjs',
 			'*.cjs',
 			'vitest.config.ts',
+			// Declaration files carry no logic to lint and, when shadowed by a
+			// same-named generated .ts, are excluded from the TS program (so the
+			// type-aware project service cannot resolve them).
+			'**/*.d.ts',
 		],
 	},
 	...obsidianRecommended,
@@ -42,6 +46,21 @@ export default tseslint.config(
 				...globals.browser,
 				...globals.node,
 			},
+		},
+		rules: {
+			// `pinball-location` is the literal default tag value shown as a
+			// settings placeholder, not prose; exempt it from sentence casing
+			// rather than disabling the rule inline (which the Obsidian
+			// reviewer disallows). `enforceCamelCaseLower` mirrors the
+			// recommended config, which rule option overrides would otherwise
+			// drop.
+			'obsidianmd/ui/sentence-case': [
+				'error',
+				{
+					enforceCamelCaseLower: true,
+					ignoreRegex: ['^pinball-location$', 'Pinball/Location'],
+				},
+			],
 		},
 	},
 	prettierConfig,

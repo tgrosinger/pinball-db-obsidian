@@ -27,5 +27,9 @@ data.json
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
 
-# Generated database module (built from data/opdb-simplified.json.gz)
-src/generated/
+# Generated database module (built from data/opdb-simplified.json.gz).
+# The hand-written ambient declaration is committed so the bundled data's type
+# is known when linting/type-checking a fresh checkout before the module is
+# generated; the generated .ts shadows it once `generate-db` has run.
+src/generated/*
+!src/generated/database.d.ts
