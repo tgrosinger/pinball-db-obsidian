@@ -81,7 +81,6 @@ export class PinballDbSettingTab extends PluginSettingTab {
 			)
 			.addText((text) =>
 				text
-					// eslint-disable-next-line obsidianmd/ui/sentence-case -- literal default tag value
 					.setPlaceholder('pinball-location')
 					.setValue(this.plugin.settings.locationTag)
 					.onChange((value) => {
@@ -98,7 +97,6 @@ export class PinballDbSettingTab extends PluginSettingTab {
 			.setDesc('The folder new location notes are created in.')
 			.addSearch((search) => {
 				search
-					// eslint-disable-next-line obsidianmd/ui/sentence-case -- literal default folder path
 					.setPlaceholder('Pinball/Locations')
 					.setValue(this.plugin.settings.locationsFolder)
 					.onChange((value) => {
