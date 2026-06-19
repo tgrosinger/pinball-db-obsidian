@@ -19,14 +19,13 @@ export interface Location {
 
 /**
  * A note offered to the predicate, as the shell maps it from the metadata cache:
- * its display name, its basename, every tag on it (frontmatter + inline, with or
- * without a leading `#`), and whether any Machine Note links to it.
+ * its display name, its basename, and every tag on it (frontmatter + inline,
+ * with or without a leading `#`).
  */
 export interface LocationCandidate {
 	readonly name: string;
 	readonly fileName: string;
 	readonly tags: readonly string[];
-	readonly linkedFromMachineNote: boolean;
 }
 
 /** The outcome of resolving typed venue text against the known Locations. */
@@ -40,16 +39,13 @@ function normalizeTag(tag: string): string {
 }
 
 /**
- * The Location predicate: a candidate is a Location only when it carries the
- * configured Location tag (matched against frontmatter and inline tags alike)
- * AND is linked from at least one Machine Note. The tag alone is not enough —
- * that link is what proves the venue has actually been used for pinball.
+ * The Location predicate: a candidate is a Location when it carries the
+ * configured Location tag (matched against frontmatter and inline tags alike).
  */
 function isLocation(
 	candidate: LocationCandidate,
 	locationTag: string,
 ): boolean {
-	if (!candidate.linkedFromMachineNote) return false;
 	const target = normalizeTag(locationTag);
 	return candidate.tags.some((tag) => normalizeTag(tag) === target);
 }

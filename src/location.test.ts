@@ -16,13 +16,12 @@ function candidate(
 		name: 'Ground Kontrol',
 		fileName: 'Ground Kontrol',
 		tags: [`#${TAG}`],
-		linkedFromMachineNote: true,
 		...overrides,
 	};
 }
 
 describe('selectLocations (the Location predicate)', () => {
-	it('accepts a note that has the tag AND a Machine-Note backlink', () => {
+	it('accepts a note that has the tag', () => {
 		const result = selectLocations([candidate()], TAG);
 		expect(result).toEqual([
 			{ name: 'Ground Kontrol', fileName: 'Ground Kontrol' },
@@ -44,15 +43,7 @@ describe('selectLocations (the Location predicate)', () => {
 		]);
 	});
 
-	it('rejects a tagged note with no Machine-Note backlink', () => {
-		const result = selectLocations(
-			[candidate({ linkedFromMachineNote: false })],
-			TAG,
-		);
-		expect(result).toEqual([]);
-	});
-
-	it('rejects a Machine-Note-linked note that lacks the tag', () => {
+	it('rejects a note that lacks the tag', () => {
 		const result = selectLocations([candidate({ tags: ['#other'] })], TAG);
 		expect(result).toEqual([]);
 	});

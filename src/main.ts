@@ -229,13 +229,12 @@ export default class PinballDbPlugin extends Plugin {
 
 	/**
 	 * Snapshot the venues that qualify for suggestions: notes carrying the
-	 * configured Location tag (frontmatter or inline) that are also linked from a
-	 * Machine Note. The pure {@link selectLocations} owns the predicate; this only
-	 * gathers each note's display name, basename, tags, and backlink flag from the
-	 * metadata cache. Listed by `name` (frontmatter, falling back to the filename).
+	 * configured Location tag (frontmatter or inline). The pure
+	 * {@link selectLocations} owns the predicate; this only gathers each note's
+	 * display name, basename, and tags from the metadata cache. Listed by `name`
+	 * (frontmatter, falling back to the filename).
 	 */
 	private existingLocations(): Location[] {
-		const linkedTargets = this.machineLinkedTargets();
 		const candidates = this.app.vault.getMarkdownFiles().map((file) => {
 			const cache = this.app.metadataCache.getFileCache(file);
 			const name: unknown = cache?.frontmatter?.name;
@@ -246,36 +245,9 @@ export default class PinballDbPlugin extends Plugin {
 						: file.basename,
 				fileName: file.basename,
 				tags: cache ? (getAllTags(cache) ?? []) : [],
-				linkedFromMachineNote: linkedTargets.has(file.path),
 			};
 		});
 		return selectLocations(candidates, this.settings.locationTag);
-	}
-
-	/**
-	 * The paths of every note linked from at least one Machine Note, read from the
-	 * resolved-links graph. "Is a Machine Note" reuses the Identifier test, so no
-	 * separate machine-tag concept is introduced.
-	 */
-	private machineLinkedTargets(): Set<string> {
-		const { resolvedLinks } = this.app.metadataCache;
-		const targets = new Set<string>();
-		for (const file of this.app.vault.getMarkdownFiles()) {
-			const frontmatter =
-				this.app.metadataCache.getFileCache(file)?.frontmatter;
-			if (
-				!hasExtractableIdentifier(
-					frontmatter,
-					this.settings.identifiers,
-				)
-			) {
-				continue;
-			}
-			for (const target of Object.keys(resolvedLinks[file.path] ?? {})) {
-				targets.add(target);
-			}
-		}
-		return targets;
 	}
 
 	/** Today's calendar day as `YYYY-MM-DD`, prefilled into the Date field. */
