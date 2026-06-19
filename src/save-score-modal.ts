@@ -49,11 +49,14 @@ export class SaveScoreModal extends Modal {
 		new Setting(this.contentEl)
 			.setName('Score')
 			.setDesc('Optional. Digits only; shown with thousand separators.')
-			.addText((text) =>
+			.addText((text) => {
+				text.inputEl.inputMode = 'numeric';
 				text.setPlaceholder('1250000').onChange((value) => {
-					this.score = value;
-				}),
-			);
+					const digitsOnly = value.replace(/\D/g, '');
+					if (digitsOnly !== value) text.setValue(digitsOnly);
+					this.score = digitsOnly;
+				});
+			});
 
 		new Setting(this.contentEl)
 			.setName('Location')
