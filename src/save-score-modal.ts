@@ -34,6 +34,9 @@ export class SaveScoreModal extends Modal {
 	) {
 		super(app);
 		this.date = today;
+
+		// Fix the keyboard hiding inputs on mobile.
+		this.modalEl.addClass('mod-lg');
 	}
 
 	override onOpen(): void {
