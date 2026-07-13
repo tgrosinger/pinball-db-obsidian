@@ -1,7 +1,7 @@
 {
 	"id": "pinball-db",
 	"name": "Pinball DB",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"minAppVersion": "1.6.6",
 	"description": "Track and organize a database of pinball machines inside your vault.",
 	"author": "Tony Grosinger",
